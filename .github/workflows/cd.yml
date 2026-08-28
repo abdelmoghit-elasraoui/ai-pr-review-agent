@@ -1,0 +1,119 @@
+name: CD — Deploy to AWS App Runner
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "Dockerfile"
+      - "requirements.txt"
+      - ".github/workflows/cd.yml"
+
+env:
+  AWS_REGION: us-east-1
+  AWS_ACCOUNT_ID: "136609826386"
+  ECR_REPOSITORY: ai-review-agent
+  SERVICE_NAME: ai-review-agent
+  GITHUB_APP_ID: "4322957"
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set commit SHA tag
+        id: tag
+        run: echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Build, tag and push image to ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ steps.tag.outputs.sha }}
+        run: |
+          docker build -t "$ECR_REGISTRY/$ECR_REPOSITORY:latest" -t "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" .
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+
+      - name: Resolve Secrets Manager ARNs
+        id: secrets-arns
+        run: |
+          echo "webhook=$(aws secretsmanager describe-secret --region "$AWS_REGION" --secret-id ai-review-agent/webhook-secret --query ARN --output text)" >> "$GITHUB_OUTPUT"
+          echo "private_key=$(aws secretsmanager describe-secret --region "$AWS_REGION" --secret-id ai-review-agent/github-private-key --query ARN --output text)" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy to AWS App Runner
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ steps.tag.outputs.sha }}
+          WEBHOOK_ARN: ${{ steps.secrets-arns.outputs.webhook }}
+          KEY_ARN: ${{ steps.secrets-arns.outputs.private_key }}
+        run: |
+          IMAGE_URI="${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
+          INSTANCE_ROLE="arn:aws:iam::${AWS_ACCOUNT_ID}:role/ai-review-agent-apprunner"
+
+          cat > /tmp/source-config.json <<EOF
+          {
+            "AuthenticationConfiguration": {
+              "AccessRoleArn": "${INSTANCE_ROLE}"
+            },
+            "AutoDeploymentsEnabled": false,
+            "ImageRepository": {
+              "ImageRepositoryType": "ECR",
+              "ImageIdentifier": "${IMAGE_URI}",
+              "ImageConfiguration": {
+                "Port": "8000",
+                "RuntimeEnvironmentVariables": {
+                  "GITHUB_APP_ID": "${GITHUB_APP_ID}",
+                  "BEDROCK_REGION": "${AWS_REGION}",
+                  "MAX_MODIFIED_LINES": "500",
+                  "LLM_RATE_LIMIT": "30",
+                  "LLM_RATE_WINDOW_SECONDS": "60",
+                  "REVIEW_COOLDOWN_SECONDS": "120"
+                },
+                "RuntimeEnvironmentSecrets": {
+                  "WEBHOOK_SECRET": "${WEBHOOK_ARN}",
+                  "GITHUB_PRIVATE_KEY": "${KEY_ARN}"
+                }
+              }
+            }
+          }
+          EOF
+
+          SVC_ARN=$(aws apprunner list-services --region "$AWS_REGION" \
+            --query "ServiceSummaryList[?ServiceName=='$SERVICE_NAME'].ServiceArn" \
+            --output text)
+
+          if [ -n "$SVC_ARN" ] && [ "$SVC_ARN" != "None" ]; then
+            echo "Updating existing service: $SVC_ARN"
+            aws apprunner update-service \
+              --region "$AWS_REGION" \
+              --service-arn "$SVC_ARN" \
+              --source-configuration "file:///tmp/source-config.json" \
+              --instance-configuration "InstanceRoleArn=${INSTANCE_ROLE}"
+          else
+            echo "Creating new service"
+            aws apprunner create-service \
+              --region "$AWS_REGION" \
+              --service-name "$SERVICE_NAME" \
+              --source-configuration "file:///tmp/source-config.json" \
+              --instance-configuration "InstanceRoleArn=${INSTANCE_ROLE}"
+          fi
+
+      - name: Print App Runner URL
+        run: |
+          aws apprunner list-services --region "$AWS_REGION" \
+            --query "ServiceSummaryList[?ServiceName=='$SERVICE_NAME'].ServiceUrl" --output text

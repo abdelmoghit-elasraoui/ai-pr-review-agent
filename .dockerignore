@@ -1,0 +1,15 @@
+.env
+*.pem
+private-key.pem
+.venv/
+__pycache__/
+*.pyc
+.git/
+.gitignore
+.dockerignore
+app_learning/
+docs/
+*.md
+restart.sh
+user_qcm_guide.html
+.DS_Store
