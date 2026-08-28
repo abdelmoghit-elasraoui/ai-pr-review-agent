@@ -7,9 +7,4 @@ __pycache__/
 .git/
 .gitignore
 .dockerignore
-app_learning/
-docs/
-*.md
-restart.sh
-user_qcm_guide.html
 .DS_Store
