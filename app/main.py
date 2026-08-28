@@ -20,6 +20,7 @@ async def root():
     return {"status": "running", "version": "1.0.1"}
 
 
+
 @app.get("/stats")
 async def stats():
     # US 4.2 observability: LLM usage statistics (calls, tokens, rejections)
