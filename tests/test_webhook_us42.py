@@ -6,7 +6,7 @@ from app import webhook
 
 
 class TestWebhookUS42(unittest.TestCase):
-    """US 4.2 — skip des grosses PRs + rate limit (avec mocks, sans réseau)."""
+    """US 4.2 — skip of large PRs + rate limit (with mocks, no network)."""
 
     def test_large_pr_skipped_with_comment(self):
         big_diff = (
@@ -29,10 +29,10 @@ class TestWebhookUS42(unittest.TestCase):
                  patch.object(webhook, "create_issue_comment", AsyncMock()) as mock_comment, \
                  patch.object(webhook, "analyze_diff", AsyncMock()) as mock_llm:
                 await webhook._process_pr_event(payload)
-                self.assertEqual(mock_comment.await_count, 1, "un commentaire explicatif posté")
+                self.assertEqual(mock_comment.await_count, 1, "an explanatory comment was posted")
                 mock_llm.assert_not_awaited()
                 body = mock_comment.await_args.args[4]
-                self.assertIn("lignes modifiées", body)
+                self.assertIn("modified lines", body)
                 self.assertIn("2", body)
 
         asyncio.run(scenario())
@@ -59,7 +59,7 @@ class TestWebhookUS42(unittest.TestCase):
                  patch.object(webhook, "analyze_diff", AsyncMock(return_value={"summary": "", "findings": []})), \
                  patch.object(webhook, "build_review", Mock(return_value=("body", [], "", ""))):
                 await webhook._process_pr_event(payload)
-                # pas de commentaire de skip posté, pas d'exception
+                # no skip comment posted, no exception
                 webhook.analyze_diff.assert_awaited()
 
         asyncio.run(scenario())
@@ -88,11 +88,11 @@ class TestWebhookUS42(unittest.TestCase):
                  patch.object(webhook, "fetch_pr_info", AsyncMock(return_value={"head": {"sha": "abc"}})), \
                  patch.object(webhook, "analyze_diff", AsyncMock(return_value={"summary": "", "findings": []})), \
                  patch.object(webhook, "build_review", Mock(return_value=("body", [], "", ""))):
-                await webhook._process_pr_event(payload(44))  # 1er synchronize → analyse
-                await webhook._process_pr_event(payload(44))  # 2e synchronize immédiat → skip
-                self.assertEqual(webhook.analyze_diff.await_count, 1, "un seul appel LLM pour la même PR dans la fenêtre")
-                await webhook._process_pr_event(payload(45))  # autre PR → analysée
-                self.assertEqual(webhook.analyze_diff.await_count, 2, "l'autre PR n'est pas bloquée")
+                await webhook._process_pr_event(payload(44))  # 1st synchronize -> analyzed
+                await webhook._process_pr_event(payload(44))  # 2nd immediate synchronize -> skipped
+                self.assertEqual(webhook.analyze_diff.await_count, 1, "only one LLM call for the same PR within the window")
+                await webhook._process_pr_event(payload(45))  # another PR -> analyzed
+                self.assertEqual(webhook.analyze_diff.await_count, 2, "the other PR is not blocked")
 
         asyncio.run(scenario())
 

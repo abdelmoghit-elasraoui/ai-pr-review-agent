@@ -26,12 +26,12 @@ _llm_stats = {
 
 
 class RateLimitExceeded(Exception):
-    # Levée quand le nombre max d'appels LLM dans la fenêtre est dépassé
+    # Raised when the max number of LLM calls in the window is exceeded
     pass
 
 
 def _acquire_slot():
-    # Réserve un slot de rate limit (fenêtre glissante): False si la limite est atteinte
+    # Reserves a rate-limit slot (sliding window): False if the limit is reached
     now = time.monotonic()
     while _llm_calls and now - _llm_calls[0] >= LLM_RATE_WINDOW_SECONDS:
         _llm_calls.popleft()
@@ -42,18 +42,18 @@ def _acquire_slot():
 
 
 def _release_slot():
-    # Libère le slot le plus récent (appelé quand l'appel Bedrock échoue)
+    # Releases the most recent slot (called when the Bedrock call fails)
     if _llm_calls:
         _llm_calls.pop()
 
 
 def get_llm_stats():
-    # Retourne une copie des statistiques d'utilisation du LLM (pour observabilité)
+    # Returns a copy of the LLM usage statistics (for observability)
     return dict(_llm_stats)
 
 
 async def _check_rate_limit():
-    # Vérifie atomiquement le rate limit avant chaque appel LLM, lève RateLimitExceeded sinon
+    # Atomically checks the rate limit before every LLM call, raises RateLimitExceeded otherwise
     async with _llm_lock:
         if not _acquire_slot():
             _llm_stats["rejected"] += 1
@@ -70,7 +70,7 @@ based ONLY on the provided context (diff, title, description).
 Rules:
 - Do not invent code or details that are not in the context. If the context is
   insufficient to answer, say so explicitly and suggest what would help.
-- Answer in the same language as the question (French by default).
+- Answer in the same language as the question (English by default).
 - Keep the answer focused and practical. Use short code snippets if useful.
 - Give the answer directly, without a greeting.
 """
@@ -98,7 +98,7 @@ Return ONLY valid JSON with this structure:
 
 
 def _decode_credentials():
-    # Décode le token ABSK (base64) en access key + secret key AWS
+    # Decodes the ABSK token (base64) into AWS access key + secret key
     if not BEDROCK_BEARER_TOKEN:
         return "", ""
     b64 = BEDROCK_BEARER_TOKEN[4:]
@@ -108,8 +108,8 @@ def _decode_credentials():
 
 
 def _get_bedrock_client():
-    # Crée le client boto3 bedrock-runtime : credentials statiques si ABSK présent,
-    # sinon rôle IAM de l'instance (cloud — même région que le modèle)
+    # Creates the boto3 bedrock-runtime client: static credentials if ABSK is present,
+    # otherwise the instance IAM role (cloud — same region as the model)
     import boto3
     if not BEDROCK_BEARER_TOKEN:
         return boto3.client("bedrock-runtime", region_name=BEDROCK_REGION)
@@ -123,7 +123,7 @@ def _get_bedrock_client():
 
 
 def _extract_json(text):
-    # Extrait et parse le JSON de la réponse LLM (tolère les blocs ``` et le texte autour)
+    # Extracts and parses the JSON from the LLM response (tolerates ``` blocks and surrounding text)
     text = text.strip()
     if text.startswith("```"):
         text = text[text.find("\n") + 1:]
@@ -138,7 +138,7 @@ def _extract_json(text):
 
 
 async def _call_llm(system_prompt, user_message):
-    # Appel unique à Bedrock Converse (rate limité, exécuté hors boucle d'événements)
+    # Single Bedrock Converse call (rate limited, executed off the event loop)
     await _check_rate_limit()
     try:
         client = _get_bedrock_client()
@@ -166,7 +166,7 @@ async def _call_llm(system_prompt, user_message):
 
 
 def _file_to_text(file_data):
-    # Rend le diff d'un seul fichier au format annoté (old/new) pour analyse séparée
+    # Renders a single file's diff in annotated format (old/new) for separate analysis
     hunks_text = []
     for h in file_data["hunks"]:
         hunks_text.append(f"@@ {h['header']}")
@@ -178,7 +178,7 @@ def _file_to_text(file_data):
 
 
 async def analyze_diff(parsed):
-    # Analyse le diff via le LLM (un appel si petit, fichier par fichier sinon), retourne summary+findings
+    # Analyzes the diff via the LLM (one call if small, file by file otherwise), returns summary+findings
     from .diff_parser import get_annotated_text
 
     if not parsed["files"]:
@@ -218,6 +218,6 @@ async def analyze_diff(parsed):
 
 
 async def answer_question(question, context):
-    # Génère une réponse IA à une question posée sur la PR, basée sur le contexte fourni
-    user_msg = f"Question du développeur :\n{question}\n\nContexte de la pull request :\n{context}"
+    # Generates an AI answer to a question asked on the PR, based on the provided context
+    user_msg = f"Developer question:\n{question}\n\nPull request context:\n{context}"
     return await _call_llm(QUESTION_SYSTEM_PROMPT, user_msg)

@@ -16,13 +16,13 @@ app.include_router(webhook_router)
 
 @app.get("/")
 async def root():
-    # Health-check: confirme que le serveur est vivant
+    # Health check: confirms the server is alive
     return {"status": "running", "version": "1.0.1"}
 
 
 @app.get("/stats")
 async def stats():
-    # Observabilité US 4.2: statistiques d'utilisation LLM (calls, tokens, rejets)
+    # US 4.2 observability: LLM usage statistics (calls, tokens, rejections)
     return get_llm_stats()
 
 

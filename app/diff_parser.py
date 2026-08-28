@@ -15,12 +15,12 @@ IGNORE_PATTERNS = [
 
 
 def should_ignore_file(filename):
-    # Vrai si le fichier matche un pattern ignoré (locks, binaires, build, node_modules…)
+    # True if the file matches an ignored pattern (locks, binaries, build, node_modules...)
     return any(pat.search(filename) for pat in IGNORE_PATTERNS)
 
 
 def parse_diff(diff_text):
-    # Parse un diff unifié en structure fichiers → hunks → lignes (+/-/contexte avec numéros)
+    # Parses a unified diff into a files -> hunks -> lines structure (+/-/context with line numbers)
     result = {"files": [], "skipped_files": []}
     current_file = None
     current_hunk = None
@@ -78,7 +78,7 @@ def parse_diff(diff_text):
 
 
 def get_annotated_text(parsed):
-    # Rend le diff au format [old=… new=…] + ligne, utilisable directement par le LLM
+    # Renders the diff as [old=... new=...] + line, directly usable by the LLM
     parts = []
     for f in parsed["files"]:
         added = sum(len(h["lines"]) for h in f["hunks"] for l in h["lines"] if l["kind"] == "+")
@@ -94,7 +94,7 @@ def get_annotated_text(parsed):
 
 
 def get_all_lines(parsed):
-    # Aplatit toutes les lignes de tous les fichiers (avec le nom du fichier) pour la carte des positions
+    # Flattens all lines of all files (with the file name) for the position map
     lines = []
     for f in parsed["files"]:
         for h in f["hunks"]:
@@ -104,7 +104,7 @@ def get_all_lines(parsed):
 
 
 def count_modified_lines(parsed):
-    # Compte les lignes réellement modifiées (+ et -) pour la limite de taille des PRs
+    # Counts the actually modified lines (+ and -) for the PR size limit
     return sum(
         1
         for f in parsed["files"]

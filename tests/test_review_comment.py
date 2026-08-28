@@ -25,8 +25,8 @@ class TestReviewComment(unittest.TestCase):
 
     def test_is_line_in_diff(self):
         parsed = self._parsed()
-        self.assertTrue(_is_line_in_diff("src/auth.js", 11, parsed))  # ligne + (new)
-        self.assertTrue(_is_line_in_diff("src/auth.js", 10, parsed))  # contexte
+        self.assertTrue(_is_line_in_diff("src/auth.js", 11, parsed))  # added line (new)
+        self.assertTrue(_is_line_in_diff("src/auth.js", 10, parsed))  # context line
         self.assertFalse(_is_line_in_diff("src/auth.js", 99, parsed))
         self.assertFalse(_is_line_in_diff("src/other.js", 11, parsed))
 

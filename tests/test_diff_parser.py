@@ -43,7 +43,7 @@ class TestDiffParser(unittest.TestCase):
 
     def test_count_modified_lines(self):
         parsed = parse_diff(SAMPLE_DIFF)
-        self.assertEqual(count_modified_lines(parsed), 3)  # 2 ajouts + 1 suppression
+        self.assertEqual(count_modified_lines(parsed), 3)  # 2 additions + 1 deletion
 
     def test_parse_diff_skips_locked(self):
         diff = """diff --git a/package-lock.json b/package-lock.json

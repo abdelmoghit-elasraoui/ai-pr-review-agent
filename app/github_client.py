@@ -14,7 +14,7 @@ _bot_login = None
 
 
 def _load_private_key():
-    # Clé privée PEM de la GitHub App : env var prioritaire (cloud), sinon fichier local
+    # GitHub App PEM private key: env var takes priority (cloud), otherwise local file
     if GITHUB_PRIVATE_KEY:
         return GITHUB_PRIVATE_KEY
     path = Path(GITHUB_PRIVATE_KEY_PATH)
@@ -24,14 +24,14 @@ def _load_private_key():
 
 
 def _generate_jwt():
-    # Signe un JWT RS256 (10 min) avec l'ID de l'app pour authentifier les appels
+    # Signs an RS256 JWT (10 min) with the app ID to authenticate API calls
     now = int(time.time())
     payload = {"iat": now - 60, "exp": now + 600, "iss": GITHUB_APP_ID}
     return jwt.encode(payload, _load_private_key(), algorithm="RS256")
 
 
 def _headers(installation_id=None):
-    # Construit les headers d'auth: token d'installation si fourni, sinon JWT de l'app
+    # Builds auth headers: installation token if provided, otherwise the app JWT
     if installation_id:
         token = _get_token(installation_id)
     else:
@@ -40,7 +40,7 @@ def _headers(installation_id=None):
 
 
 def _get_token(installation_id):
-    # Récupère/cache le token d'installation (55 min) pour un repo donné
+    # Fetches/caches the installation token (55 min) for a given repo
     now = time.time()
     if installation_id in _token_cache:
         token, expires_at = _token_cache[installation_id]
@@ -58,7 +58,7 @@ def _get_token(installation_id):
 
 
 async def fetch_pr_diff(installation_id, owner, repo, pr_number):
-    # Récupère le diff brut d'une PR (header Accept diff obligatoire)
+    # Fetches the raw diff of a PR (the diff Accept header is mandatory)
     url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}.diff"
     headers = {**_headers(installation_id), "Accept": "application/vnd.github.v3.diff"}
     async with httpx.AsyncClient() as client:
@@ -68,7 +68,7 @@ async def fetch_pr_diff(installation_id, owner, repo, pr_number):
 
 
 async def fetch_pr_info(installation_id, owner, repo, pr_number):
-    # Récupère les métadonnées de la PR (titre, description, head.sha)
+    # Fetches PR metadata (title, description, head.sha)
     url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}"
     async with httpx.AsyncClient() as client:
         resp = await client.get(url, headers=_headers(installation_id))
@@ -77,7 +77,7 @@ async def fetch_pr_info(installation_id, owner, repo, pr_number):
 
 
 async def fetch_bot_login(installation_id):
-    # Récupère (en cache) le slug de l'app pour détecter les mentions du bot
+    # Fetches (and caches) the app slug to detect bot mentions
     global _bot_login
     if _bot_login:
         return _bot_login
@@ -92,7 +92,7 @@ async def fetch_bot_login(installation_id):
 
 async def create_pr_review(installation_id, owner, repo, pr_number,
                            commit_id, body, event, comments):
-    # Crée une review GitHub (COMMENT/REQUEST_CHANGES) avec commentaires inline
+    # Creates a GitHub review (COMMENT/REQUEST_CHANGES) with inline comments
     url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}/reviews"
     payload = {"commit_id": commit_id, "body": body, "event": event, "comments": comments}
     async with httpx.AsyncClient() as client:
@@ -104,7 +104,7 @@ async def create_pr_review(installation_id, owner, repo, pr_number,
 
 
 async def create_issue_comment(installation_id, owner, repo, issue_number, body):
-    # Poste un commentaire dans la conversation de la PR (issues/comments)
+    # Posts a comment in the PR conversation (issues/comments)
     url = f"https://api.github.com/repos/{owner}/{repo}/issues/{issue_number}/comments"
     async with httpx.AsyncClient() as client:
         resp = await client.post(url, json={"body": body}, headers=_headers(installation_id))
@@ -115,7 +115,7 @@ async def create_issue_comment(installation_id, owner, repo, issue_number, body)
 
 
 async def create_review_comment_reply(installation_id, owner, repo, pr_number, in_reply_to_id, body):
-    # Répond dans un fil de commentaire de ligne existant (in_reply_to)
+    # Replies within an existing line-comment thread (in_reply_to)
     url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}/comments"
     payload = {"in_reply_to": in_reply_to_id, "body": body}
     async with httpx.AsyncClient() as client:

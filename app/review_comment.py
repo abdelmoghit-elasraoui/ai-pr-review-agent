@@ -5,7 +5,7 @@ logger = logging.getLogger(__name__)
 
 
 def _find_file(filename, parsed):
-    # Localise un fichier dans le diff parsé (tolère les préfixes a/ et b/)
+    # Locates a file in the parsed diff (tolerates a/ and b/ prefixes)
     for f in parsed["files"]:
         if f["filename"] == filename:
             return f
@@ -16,7 +16,7 @@ def _find_file(filename, parsed):
 
 
 def _is_line_in_diff(filename, line, parsed):
-    # Vrai si le numéro de ligne existe dans le diff (évite les 422 de l'API GitHub)
+    # True if the line number exists in the diff (avoids GitHub API 422 errors)
     file_data = _find_file(filename, parsed)
     if not file_data:
         return False
@@ -28,7 +28,7 @@ def _is_line_in_diff(filename, line, parsed):
 
 
 def _build_position_map(parsed):
-    # Convertit les numéros de ligne (fichier, new) en positions attendues par l'API review
+    # Converts (file, new) line numbers into the positions expected by the review API
     all_lines = get_all_lines(parsed)
     position_map = {}
     position = 0
@@ -47,7 +47,7 @@ def _build_position_map(parsed):
 
 
 def build_review(review, parsed):
-    # Transforme les findings LLM en review GitHub: commentaires inline valides + findings globaux
+    # Transforms LLM findings into a GitHub review: valid inline comments + global findings
     findings = review.get("findings", [])
     summary = review.get("summary", "")
 

@@ -19,7 +19,7 @@ BOT_ALIASES = ["ai-reviewer"]
 
 
 def extract_question(comment_body, bot_login):
-    # Détecte la mention du bot (@slug ou @ai-reviewer) et retourne le texte de la question, sinon None
+    # Detects the bot mention (@slug or @ai-reviewer) and returns the question text, or None
     if not comment_body or not bot_login:
         return None
     handles = [bot_login, *BOT_ALIASES]
@@ -34,7 +34,7 @@ def extract_question(comment_body, bot_login):
 
 
 def _line_text(parsed, filename, line):
-    # Retourne le texte d'une ligne ciblée dans le diff (pour les commentaires de ligne)
+    # Returns the text of a targeted line in the diff (for line comments)
     for f in parsed["files"]:
         if f["filename"] != filename:
             continue
@@ -47,7 +47,7 @@ def _line_text(parsed, filename, line):
 
 async def _build_context(installation_id, owner, repo_name, pr_number,
                          focus_file=None, focus_line=None):
-    # Construit le contexte pour le LLM: diff annoté + titre/description (+ ligne ciblée si commentaire de ligne)
+    # Builds the LLM context: annotated diff + title/description (+ targeted line for line comments)
     parts = []
     try:
         diff_text = await fetch_pr_diff(installation_id, owner, repo_name, pr_number)
@@ -55,38 +55,38 @@ async def _build_context(installation_id, owner, repo_name, pr_number,
             parsed = parse_diff(diff_text)
             if focus_file:
                 text = _line_text(parsed, focus_file, focus_line) if focus_line else None
-                where = f" (ligne {focus_line})" if focus_line else ""
+                where = f" (line {focus_line})" if focus_line else ""
                 if text is not None:
-                    parts.append(f"L'utilisateur a commenté le fichier {focus_file}{where} : {text}")
+                    parts.append(f"The user commented on file {focus_file}{where}: {text}")
                 else:
-                    parts.append(f"L'utilisateur a commenté le fichier {focus_file}{where} (ligne introuvable dans le diff).")
+                    parts.append(f"The user commented on file {focus_file}{where} (line not found in the diff).")
             annotated = get_annotated_text(parsed)
-            parts.append(f"Diff de la PR (fichiers modifiés) :\n{annotated[:MAX_INPUT_CHARS]}")
+            parts.append(f"PR diff (modified files):\n{annotated[:MAX_INPUT_CHARS]}")
     except Exception:
         logger.exception("Could not fetch PR diff for context")
     try:
         pr_info = await fetch_pr_info(installation_id, owner, repo_name, pr_number)
-        parts.append(f"Titre de la PR : {pr_info.get('title', '')}")
+        parts.append(f"PR title: {pr_info.get('title', '')}")
         if pr_info.get("body"):
-            parts.append(f"Description de la PR :\n{pr_info['body'][:MAX_INPUT_CHARS]}")
+            parts.append(f"PR description:\n{pr_info['body'][:MAX_INPUT_CHARS]}")
     except Exception:
         logger.exception("Could not fetch PR info for context")
     if not parts:
-        parts.append("Aucun contexte disponible pour cette pull request.")
+        parts.append("No context available for this pull request.")
     return "\n\n".join(parts)
 
 
 async def _handle_mention(installation_id, owner, repo_name, pr_number,
                           comment_body, author, in_reply_to_id=None,
                           focus_file=None, focus_line=None):
-    # Cœur US 3.2: détecte la mention, génère la réponse IA et la poste (reply de ligne ou fil)
+    # US 3.2 core: detects the mention, generates the AI answer and posts it (line reply or thread)
     bot_login = await fetch_bot_login(installation_id)
     question = extract_question(comment_body, bot_login)
     if question is None:
         logger.info("Agent not mentioned, ignoring PR comment on #%s", pr_number)
         return
     if not question:
-        question = "Explique-moi cette pull request."
+        question = "Explain this pull request."
 
     logger.info("Agent mentioned by %s on PR #%s: %s", author, pr_number, question[:100])
     context = await _build_context(installation_id, owner, repo_name, pr_number,
@@ -95,8 +95,8 @@ async def _handle_mention(installation_id, owner, repo_name, pr_number,
         answer = await answer_question(question, context)
     except RateLimitExceeded:
         logger.warning("Rate limit exceeded, posting friendly fallback on PR #%s", pr_number)
-        answer = ("L'agent IA est temporairement saturé (limite de requêtes atteinte). "
-                  "Merci de réessayer dans quelques minutes.")
+        answer = ("The AI agent is temporarily saturated (request limit reached). "
+                  "Please try again in a few minutes.")
     response_body = REPLY_HEADER + answer.strip()
 
     if in_reply_to_id:
@@ -113,7 +113,7 @@ async def _handle_mention(installation_id, owner, repo_name, pr_number,
 
 
 async def handle_issue_comment(payload):
-    # Point d'entrée des commentaires de conversation: extrait les infos et déclenche _handle_mention
+    # Entry point for conversation comments: extracts the info and triggers _handle_mention
     try:
         installation_id = payload.get("installation", {}).get("id")
         if not installation_id:
@@ -137,7 +137,7 @@ async def handle_issue_comment(payload):
 
 
 async def handle_review_comment(payload):
-    # Point d'entrée des commentaires de ligne: passe fichier/ligne ciblés pour répondre dans le fil
+    # Entry point for line comments: passes the targeted file/line to reply within the thread
     try:
         installation_id = payload.get("installation", {}).get("id")
         if not installation_id:

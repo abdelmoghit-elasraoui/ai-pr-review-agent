@@ -21,7 +21,7 @@ _cooldown_lock = asyncio.Lock()
 
 
 async def _should_skip_for_cooldown(installation_id, owner, repo, pr_number):
-    # Anti-orage: ignore les synchronize répétés trop rapprochés sur la même PR (coût LLM)
+    # Anti-storm: ignores repeated synchronize events too close together on the same PR (LLM cost)
     key = (installation_id, owner, repo, pr_number)
     now = time.monotonic()
     async with _cooldown_lock:
@@ -35,7 +35,7 @@ async def _should_skip_for_cooldown(installation_id, owner, repo, pr_number):
 
 
 def verify_signature(payload, signature_header):
-    # Valide la signature HMAC-SHA256 du webhook pour prouver qu'il vient de GitHub
+    # Validates the webhook HMAC-SHA256 signature to prove the request comes from GitHub
     if not signature_header or not signature_header.startswith("sha256="):
         return False
     received = signature_header[7:]
@@ -44,7 +44,7 @@ def verify_signature(payload, signature_header):
 
 
 async def _is_bot_comment(payload):
-    # Anti-boucle: ignore les événements envoyés par des bots ou par l'agent lui-même
+    # Anti-loop: ignores events sent by bots or by the agent itself
     sender = payload.get("sender", {})
     if sender.get("type") == "Bot" or sender.get("login", "").endswith("[bot]"):
         return True
@@ -59,7 +59,7 @@ async def _is_bot_comment(payload):
 
 
 def _log_diff(parsed):
-    # Trace dans les logs le récapitulatif du diff (fichiers, +/-, fichiers ignorés)
+    # Logs the diff summary (files, +/-, ignored files)
     logger.info("Diff: %d files, +%d/-%d lines, %d skipped",
                 len(parsed["files"]),
                 sum(len(h["lines"]) for f in parsed["files"] for h in f["hunks"] for l in h["lines"] if l["kind"] == "+"),
@@ -74,7 +74,7 @@ def _log_diff(parsed):
 
 
 async def _process_pr_event(payload):
-    # Pipeline complet d'une PR: diff → taille → LLM → review GitHub (skips si trop grosse ou rate limit)
+    # Full PR pipeline: diff -> size -> LLM -> GitHub review (skips if too large or rate limited)
     try:
         installation_id = payload.get("installation", {}).get("id")
         if not installation_id:
@@ -102,9 +102,9 @@ async def _process_pr_event(payload):
             try:
                 await create_issue_comment(
                     installation_id, owner, repo, pr_number,
-                    f"## 🤖 AI Code Review Agent\n\nCette PR dépasse la limite de {MAX_MODIFIED_LINES} "
-                    f"lignes modifiées ({modified_lines} détectées). L'analyse automatique a été ignorée "
-                    f"pour limiter les coûts d'appel à l'API LLM."
+                    f"## 🤖 AI Code Review Agent\n\nThis PR exceeds the limit of {MAX_MODIFIED_LINES} "
+                    f"modified lines ({modified_lines} detected). The automatic analysis was skipped "
+                    f"to limit LLM API call costs."
                 )
             except Exception:
                 logger.exception("Could not post size-limit comment")
@@ -118,8 +118,8 @@ async def _process_pr_event(payload):
             try:
                 await create_issue_comment(
                     installation_id, owner, repo, pr_number,
-                    "## 🤖 AI Code Review Agent\n\nL'analyse automatique n'a pas pu être réalisée : "
-                    "la limite de requêtes vers l'API LLM a été atteinte. Réessayez dans quelques instants."
+                    "## 🤖 AI Code Review Agent\n\nThe automatic analysis could not be performed: "
+                    "the LLM API request limit was reached. Please try again in a few moments."
                 )
             except Exception:
                 logger.exception("Could not post rate-limit comment")
@@ -145,7 +145,7 @@ async def _process_pr_event(payload):
 
 
 async def _process_issue_comment(payload):
-    # Redirige un commentaire de conversation (mention) vers le handler de commandes
+    # Forwards a conversation comment (mention) to the command handler
     if await _is_bot_comment(payload):
         return
     issue = payload.get("issue", {})
@@ -159,7 +159,7 @@ async def _process_issue_comment(payload):
 
 
 async def _process_review_comment(payload):
-    # Redirige un commentaire sur une ligne du diff vers le handler de commandes (reply dans le fil)
+    # Forwards a diff line comment to the command handler (reply within the thread)
     if await _is_bot_comment(payload):
         return
     comment = payload.get("comment", {})
@@ -173,7 +173,7 @@ async def _process_review_comment(payload):
 
 @router.post("/webhook")
 async def webhook_handler(request: Request):
-    # Point d'entrée unique: vérifie la signature puis route chaque événement GitHub vers son handler
+    # Single entry point: verifies the signature then routes each GitHub event to its handler
     body = await request.body()
     sig = request.headers.get("x-hub-signature-256")
 
